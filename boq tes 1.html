@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>BOQ Aggregator - Cluster & HP Only</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f0f2f5; color: #333; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h2 { color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 15px; margin-top: 0; }
+        #drop-area { border: 3px dashed #1a73e8; padding: 50px; text-align: center; cursor: pointer; border-radius: 10px; background: #f8fbff; transition: 0.3s; }
+        #drop-area:hover { background: #e8f0fe; border-color: #1557b0; }
+        .btn { background: #1a73e8; color: white; border: none; padding: 12px 30px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 20px; }
+        .btn:hover { background: #1557b0; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        #file-list { margin-top: 20px; font-weight: bold; color: #5f6368; }
+        .info-box { background: #fff3cd; border-left: 5px solid #ffc107; padding: 15px; margin-bottom: 20px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>BOQ Summary Generator</h2>
+    <div class="info-box">
+        <strong>Sistem Otomatis:</strong> Mengambil Nama Cluster & HP. <br>
+        <strong>Input Manual:</strong> Region & RPM bisa kamu isi sendiri di file hasil download.
+    </div>
+    
+    <div id="drop-area" onclick="document.getElementById('fileElem').click()">
+        Drag & Drop file BOQ ke sini <br> atau <strong>Klik untuk Pilih File</strong>
+        <input type="file" id="fileElem" multiple accept=".xlsx, .xls" onchange="handleFiles(this.files)" style="display:none">
+    </div>
+
+    <div id="file-list">Belum ada file yang dipilih.</div>
+    <button id="processBtn" class="btn" disabled onclick="processFiles()">Generate & Download Master BOQ</button>
+</div>
+
+<script>
+let uploadedFiles = [];
+
+function handleFiles(files) {
+    uploadedFiles = Array.from(files);
+    document.getElementById('file-list').innerHTML = `📦 ${uploadedFiles.length} file siap diproses.`;
+    document.getElementById('processBtn').disabled = false;
+}
+
+async function processFiles() {
+    let finalData = [];
+    const targetSheet = "BoQ NRO All Feeder";
+    
+    for (let file of uploadedFiles) {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data);
+        
+        if (!workbook.SheetNames.includes(targetSheet)) {
+            console.warn(`Sheet "${targetSheet}" tidak ditemukan di file: ${file.name}`);
+            continue;
+        }
+        
+        const worksheet = workbook.Sheets[targetSheet];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Mapping berdasarkan struktur file:
+        // Baris 2 (index 1), Kolom O (index 14) -> Cluster Name
+        // Baris 4 (index 3), Kolom O (index 14) -> HP
+        const clusterName = jsonData[1] ? jsonData[1][14] : "Data Tidak Ditemukan";
+        const hpValue = jsonData[3] ? jsonData[3][14] : 0;
+
+        finalData.push({
+            "NO": finalData.length + 1,
+            "SF name": clusterName,
+            "region": "", // Dikosongkan sesuai permintaan
+            "HP": hpValue,
+            "rpm": "" // Dikosongkan
+        });
+    }
+
+    exportToExcel(finalData);
+}
+
+function exportToExcel(data) {
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SUMMARY");
+    
+    // Memberikan nama file dengan tanggal hari ini
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Master_BOQ_Summary_${date}.xlsx`);
+    
+    alert("Berhasil! File Master BOQ telah diunduh.");
+}
+
+// Drag & Drop Logic
+const dropArea = document.getElementById('drop-area');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+});
+dropArea.addEventListener('drop', e => handleFiles(e.dataTransfer.files), false);
+</script>
+
+</body>
+</html>
